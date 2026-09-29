@@ -9,35 +9,44 @@ from ml_advisor.agents.base_agent import (
     AgentUnavailableError,
     BaseAgent,
 )
+from ml_advisor.settings import Settings, load_settings
 from ml_advisor.utils.config import get_ollama_host
-
-DEFAULT_TIMEOUT = 300.0
 
 
 class OllamaAgent(BaseAgent):
     """Agente que usa um modelo servido pelo Ollama.
 
-    Exemplo:
-        >>> agent = OllamaAgent(model="mistral:7b-instruct-q4_K_M")
-        >>> agent.is_available()
-        True
-        >>> agent.generate("Explique overfitting em uma frase.")
-        '...'
+    Aceita configuração de três formas:
+
+    1. ``OllamaAgent(settings=...)`` — passa um ``Settings`` pronto.
+    2. ``OllamaAgent(model="...", timeout=...)`` — overrides pontuais; o
+       restante é resolvido via ``load_settings()`` (env vars, TOML, preset).
+    3. ``OllamaAgent()`` — usa apenas a cadeia padrão de configuração.
     """
 
     def __init__(
         self,
-        model: str,
+        model: str | None = None,
         host: str | None = None,
-        timeout: float = DEFAULT_TIMEOUT,
+        timeout: float | None = None,
+        settings: Settings | None = None,
     ) -> None:
-        self.model = model
+        if settings is None:
+            settings = load_settings(model=model, timeout=timeout)
+        self.settings = settings
         self.host = host or get_ollama_host()
-        self.timeout = timeout
+
+    @property
+    def model(self) -> str:
+        return self.settings.model
+
+    @property
+    def timeout(self) -> float:
+        return self.settings.timeout
 
     @property
     def name(self) -> str:
-        return f"ollama:{self.model}"
+        return f"ollama:{self.settings.model}"
 
     def is_available(self) -> bool:
         try:
@@ -66,21 +75,22 @@ class OllamaAgent(BaseAgent):
         if not prompt.strip():
             raise AgentError("prompt vazio")
 
+        if temperature is None:
+            temperature = self.settings.temperature
+        if max_tokens is None:
+            max_tokens = self.settings.max_tokens
+
         payload: dict = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
         }
         if system is not None:
             payload["system"] = system
-
-        options: dict = {}
-        if temperature is not None:
-            options["temperature"] = temperature
-        if max_tokens is not None:
-            options["num_predict"] = max_tokens
-        if options:
-            payload["options"] = options
 
         try:
             response = httpx.post(
