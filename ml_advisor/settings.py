@@ -5,11 +5,11 @@ Prioridade (maior para menor):
 1. Argumentos explícitos no código.
 2. Variáveis de ambiente ``ML_ADVISOR_*``.
 3. Arquivo ``ml_advisor.toml`` (procura em ``$ML_ADVISOR_CONFIG`` ou CWD).
-4. Valores do preset escolhido.
+4. Valores do preset escolhido dentro do provider.
 5. Defaults do projeto.
 
-Presets são perfis pré-definidos otimizados para diferentes capacidades
-de hardware. Ver ``PRESETS``.
+Providers atualmente implementados são listados em ``AVAILABLE_PROVIDERS``.
+Presets para outros providers existem apenas como planejamento.
 """
 
 from __future__ import annotations
@@ -24,48 +24,129 @@ class SettingsError(ValueError):
     """Erro de configuração."""
 
 
-PRESETS: dict[str, dict] = {
-    "minimal": {
-        "model": "phi3:mini-4k-instruct-q4_K_M",
-        "timeout": 180.0,
-        "temperature": 0.3,
-        "max_tokens": 512,
-    },
-    "balanced": {
-        "model": "mistral:7b-instruct-q4_K_M",
-        "timeout": 300.0,
-        "temperature": 0.2,
-        "max_tokens": 1024,
-    },
-    "quality": {
-        "model": "llama3.1:8b-instruct-q4_K_M",
-        "timeout": 600.0,
-        "temperature": 0.2,
-        "max_tokens": 2048,
-    },
-}
-
+DEFAULT_PROVIDER = "ollama"
 DEFAULT_PRESET = "balanced"
 DEFAULT_CONFIG_FILENAME = "ml_advisor.toml"
 _ENV_PREFIX = "ML_ADVISOR_"
+
+# Providers com agente funcional neste projeto.
+AVAILABLE_PROVIDERS: frozenset[str] = frozenset({"ollama"})
+
+# Providers planejados. Aparecem na config para o usuário poder escolher
+# no futuro sem reescrever nada, mas ainda não funcionam.
+PLANNED_PROVIDERS: frozenset[str] = frozenset({"openai", "anthropic", "gemini"})
+
+
+PRESETS: dict[str, dict[str, dict]] = {
+    "ollama": {
+        "minimal": {
+            "model": "phi3:mini-4k-instruct-q4_K_M",
+            "timeout": 180.0,
+            "temperature": 0.3,
+            "max_tokens": 512,
+        },
+        "balanced": {
+            "model": "mistral:7b-instruct-q4_K_M",
+            "timeout": 300.0,
+            "temperature": 0.2,
+            "max_tokens": 1024,
+        },
+        "quality": {
+            "model": "llama3.1:8b-instruct-q4_K_M",
+            "timeout": 600.0,
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        },
+    },
+    # Os blocos abaixo são planejamento. Nenhum é usado enquanto o
+    # respectivo agente não for implementado.
+    "openai": {
+        "minimal": {
+            "model": "gpt-4o-mini",
+            "timeout": 60.0,
+            "temperature": 0.3,
+            "max_tokens": 512,
+        },
+        "balanced": {
+            "model": "gpt-4o-mini",
+            "timeout": 90.0,
+            "temperature": 0.2,
+            "max_tokens": 1024,
+        },
+        "quality": {
+            "model": "gpt-4o",
+            "timeout": 120.0,
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        },
+    },
+    "anthropic": {
+        "minimal": {
+            "model": "claude-3-5-haiku-latest",
+            "timeout": 60.0,
+            "temperature": 0.3,
+            "max_tokens": 512,
+        },
+        "balanced": {
+            "model": "claude-3-5-sonnet-latest",
+            "timeout": 90.0,
+            "temperature": 0.2,
+            "max_tokens": 1024,
+        },
+        "quality": {
+            "model": "claude-3-5-sonnet-latest",
+            "timeout": 120.0,
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        },
+    },
+    "gemini": {
+        "minimal": {
+            "model": "gemini-2.0-flash",
+            "timeout": 60.0,
+            "temperature": 0.3,
+            "max_tokens": 512,
+        },
+        "balanced": {
+            "model": "gemini-2.0-flash",
+            "timeout": 90.0,
+            "temperature": 0.2,
+            "max_tokens": 1024,
+        },
+        "quality": {
+            "model": "gemini-1.5-pro",
+            "timeout": 120.0,
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        },
+    },
+}
 
 
 @dataclass(frozen=True)
 class Settings:
     """Configuração resolvida e validada."""
 
+    provider: str
     preset: str
     model: str
     timeout: float
     temperature: float
     max_tokens: int
 
+    @property
+    def is_available(self) -> bool:
+        """Retorna ``True`` se o provider tem agente implementado."""
+        return self.provider in AVAILABLE_PROVIDERS
+
     def to_dict(self) -> dict:
         return asdict(self)
 
     def describe(self) -> str:
+        status = "implementado" if self.is_available else "planejado"
         return "\n".join(
             [
+                f"provider:    {self.provider} ({status})",
                 f"preset:      {self.preset}",
                 f"model:       {self.model}",
                 f"timeout:     {self.timeout}s",
@@ -115,7 +196,6 @@ def _env_int(name: str) -> int | None:
 
 
 def _resolve_config_path(explicit: Path | str | None) -> Path | None:
-    """Descobre qual arquivo TOML usar, se houver."""
     if explicit is not None:
         path = Path(explicit)
         if not path.exists():
@@ -149,12 +229,22 @@ def _load_toml_section(path: Path) -> dict:
     return section
 
 
+def list_presets(provider: str | None = None) -> dict:
+    """Lista presets disponíveis, opcionalmente filtrando por provider."""
+    if provider is None:
+        return {p: dict(presets) for p, presets in PRESETS.items()}
+    if provider not in PRESETS:
+        raise SettingsError(f"Provider desconhecido: {provider!r}")
+    return dict(PRESETS[provider])
+
+
 # ---------------------------------------------------------------------------
 # API pública
 # ---------------------------------------------------------------------------
 
 
 def load_settings(
+    provider: str | None = None,
     preset: str | None = None,
     model: str | None = None,
     timeout: float | None = None,
@@ -168,15 +258,30 @@ def load_settings(
     if path is not None:
         toml_data = _load_toml_section(path)
 
+    resolved_provider = _first_not_none(
+        provider,
+        _env("PROVIDER"),
+        toml_data.get("provider"),
+        DEFAULT_PROVIDER,
+    )
+    if not isinstance(resolved_provider, str) or resolved_provider not in PRESETS:
+        raise SettingsError(
+            f"Provider inválido: {resolved_provider!r}. " f"Opções: {sorted(PRESETS)}"
+        )
+
     resolved_preset = _first_not_none(
         preset,
         _env("PRESET"),
         toml_data.get("preset"),
         DEFAULT_PRESET,
     )
-    if resolved_preset not in PRESETS:
-        raise SettingsError(f"Preset inválido: {resolved_preset!r}. " f"Opções: {sorted(PRESETS)}")
-    preset_values = PRESETS[resolved_preset]
+    provider_presets = PRESETS[resolved_provider]
+    if resolved_preset not in provider_presets:
+        raise SettingsError(
+            f"Preset inválido para {resolved_provider}: {resolved_preset!r}. "
+            f"Opções: {sorted(provider_presets)}"
+        )
+    preset_values = provider_presets[resolved_preset]
 
     resolved_model = _first_not_none(
         model,
@@ -211,6 +316,7 @@ def load_settings(
         raise SettingsError(f"max_tokens deve ser > 0, recebido: {resolved_max_tokens}")
 
     return Settings(
+        provider=resolved_provider,
         preset=resolved_preset,
         model=resolved_model,
         timeout=float(resolved_timeout),

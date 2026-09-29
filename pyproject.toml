@@ -43,3 +43,9 @@ addopts = "-v --tb=short"
 [project.scripts]
 ollama-control = "ml_advisor.utils.ollama_control:main"
 ml-advisor = "ml_advisor.cli:main"
+
+[project.optional-dependencies]
+openai = ["openai>=1.50"]
+anthropic = ["anthropic>=0.40"]
+gemini = ["google-genai>=0.5"]
+all = ["openai>=1.50", "anthropic>=0.40", "google-genai>=0.5"]
