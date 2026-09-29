@@ -24,7 +24,7 @@ gratuidade, privacidade e reprodutibilidade.
 
 ```bash
 # 1. Clonar
-git clone git@github.com:<seu-usuario>/ml-advisor.git
+git clone git@github.com:kariluss/ml-advisor.git
 cd ml-advisor
 
 # 2. Sincronizar dependências
