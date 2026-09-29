@@ -32,3 +32,9 @@ uv sync
 
 # 3. Verificar conexão com Ollama
 uv run python examples/test_ollama.py
+
+## Documentação
+
+- [`docs/setup.md`](docs/setup.md) — como reproduzir o ambiente do zero.
+- [`docs/architecture.md`](docs/architecture.md) — visão de arquitetura e
+  decisões de design.
