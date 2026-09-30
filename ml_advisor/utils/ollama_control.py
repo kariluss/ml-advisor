@@ -19,7 +19,7 @@ import httpx
 
 from ml_advisor.utils.config import get_ollama_host
 
-_START_WAIT_SECONDS = 20
+_START_WAIT_SECONDS = 40
 _PING_TIMEOUT = 3.0
 
 

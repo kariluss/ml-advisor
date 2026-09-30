@@ -49,7 +49,7 @@ PRESETS: dict[str, dict[str, dict]] = {
             "model": "mistral:7b-instruct-q4_K_M",
             "timeout": 300.0,
             "temperature": 0.2,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
         },
         "quality": {
             "model": "llama3.1:8b-instruct-q4_K_M",
@@ -71,7 +71,7 @@ PRESETS: dict[str, dict[str, dict]] = {
             "model": "gpt-4o-mini",
             "timeout": 90.0,
             "temperature": 0.2,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
         },
         "quality": {
             "model": "gpt-4o",
