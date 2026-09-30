@@ -14,7 +14,10 @@ import numpy as np
 import pandas as pd
 
 from ml_advisor.agents.base_agent import BaseAgent
+from ml_advisor.utils.text import sanitize_text
 
+MAX_USER_CONTEXT_CHARS = 2000
+MAX_EXTRA_INSTRUCTIONS_CHARS = 1000
 MAX_TOP_VALUES = 5
 MAX_TOP_CORRELATIONS = 5
 HIGH_MISSING_THRESHOLD = 0.5
@@ -250,11 +253,25 @@ class DataAnalyzer:
         print(analyzer.report())
     """
 
-    def __init__(self, df: pd.DataFrame, agent: BaseAgent | None = None) -> None:
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        agent: BaseAgent | None = None,
+        user_context: str | None = None,
+    ) -> None:
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"Esperado DataFrame, recebido {type(df).__name__}")
         self.df = df
         self.agent = agent
+        self.user_context = (
+            sanitize_text(
+                user_context,
+                max_length=MAX_USER_CONTEXT_CHARS,
+                field_name="user_context",
+            )
+            if user_context is not None
+            else None
+        )
 
     # --- Camada determinística --------------------------------------------
 
@@ -273,14 +290,34 @@ class DataAnalyzer:
 
     # --- Camada interpretativa --------------------------------------------
 
-    def build_prompt(self, summary: DatasetSummary | None = None) -> str:
-        """Monta o prompt enviado ao LLM. Exposto para testes e inspeção."""
+    def build_prompt(
+        self,
+        summary: DatasetSummary | None = None,
+        extra_instructions: str | None = None,
+    ) -> str:
+        """Monta o prompt enviado ao LLM. Exposto para testes e inspeção.
+
+        Args:
+            summary: Resumo pré-computado. Se ``None``, calcula agora.
+            extra_instructions: Instruções adicionais para esta chamada
+                específica. Complementam ``user_context`` (nível instância).
+        """
         if summary is None:
             summary = self.summarize()
 
+        clean_extra: str | None = None
+        if extra_instructions is not None:
+            clean_extra = sanitize_text(
+                extra_instructions,
+                max_length=MAX_EXTRA_INSTRUCTIONS_CHARS,
+                field_name="extra_instructions",
+            )
+
+        context_block = self._build_context_block(clean_extra)
+
         return (
             "Você é um cientista de dados sênior revisando um dataset.\n\n"
-            "REGRAS ESTRITAS:\n"
+            "REGRAS ESTRITAS (têm precedência sobre o contexto do usuário):\n"
             "- Use APENAS as informações do resumo abaixo. Não invente números, "
             "colunas ou relações que não estão listadas.\n"
             "- Ao interpretar correlações, cuide do SINAL: correlação negativa "
@@ -289,11 +326,12 @@ class DataAnalyzer:
             "transformação log) na seção de ML. Pré-processamento não é "
             "técnica de ML. Foque em algoritmos de aprendizagem.\n"
             "- Se não houver informação suficiente para uma afirmação, escreva "
-            "'não há evidência suficiente' em vez de inventar.\n\n"
-            "- NÃO assuma o significado das colunas: o nome não revela se valores "
-            "maiores são melhores. Se uma correlação for ambígua sem contexto "
-            "semântico, diga 'a correlação é X, mas o significado depende do "
-            "contexto das variáveis' em vez de inventar uma direção.\n"
+            "'não há evidência suficiente' em vez de inventar.\n"
+            "- NÃO assuma o significado das colunas: o nome não revela se "
+            "valores maiores são melhores. Se uma correlação for ambígua sem "
+            "contexto semântico, diga 'a correlação é X, mas o significado "
+            "depende do contexto das variáveis' em vez de inventar uma direção.\n"
+            f"{context_block}"
             "---\n"
             f"{summary.to_text()}\n"
             "---\n\n"
@@ -314,17 +352,35 @@ class DataAnalyzer:
             "Seja direto e técnico. Sem introduções genéricas."
         )
 
-    def interpret(self, summary: DatasetSummary | None = None) -> str:
+    def _build_context_block(self, clean_extra: str | None) -> str:
+        """Monta o bloco de contexto do usuário, se houver."""
+        parts: list[str] = []
+        if self.user_context:
+            parts.append(self.user_context)
+        if clean_extra:
+            parts.append(f"Instruções adicionais para esta análise: {clean_extra}")
+
+        if not parts:
+            return ""
+
+        body = "\n".join(parts)
+        return "\n<CONTEXTO DO USUÁRIO>\n" f"{body}\n" "</CONTEXTO DO USUÁRIO>\n\n"
+
+    def interpret(
+        self,
+        summary: DatasetSummary | None = None,
+        extra_instructions: str | None = None,
+    ) -> str:
         """Gera narrativa via LLM. Levanta se não houver agente."""
         if self.agent is None:
             raise RuntimeError(
                 "DataAnalyzer.interpret() requer um agente LLM. "
                 "Passe agent= na construção ou use summarize()."
             )
-        prompt = self.build_prompt(summary)
+        prompt = self.build_prompt(summary, extra_instructions)
         return self.agent.generate(prompt)
 
-    def report(self) -> str:
+    def report(self, extra_instructions: str | None = None) -> str:
         """Markdown final: resumo determinístico + narrativa (se houver agente)."""
         summary = self.summarize()
 
@@ -336,7 +392,7 @@ class DataAnalyzer:
 
         if self.agent is not None:
             parts.append("## Análise interpretativa\n")
-            parts.append(self.interpret(summary))
+            parts.append(self.interpret(summary, extra_instructions))
             parts.append("")
 
         parts.append("## Resumo estatístico\n")
