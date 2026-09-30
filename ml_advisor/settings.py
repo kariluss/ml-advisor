@@ -18,6 +18,7 @@ import os
 import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from ml_advisor.utils.text import sanitize_text
 
 
 class SettingsError(ValueError):
@@ -28,6 +29,7 @@ DEFAULT_PROVIDER = "ollama"
 DEFAULT_PRESET = "balanced"
 DEFAULT_CONFIG_FILENAME = "ml_advisor.toml"
 _ENV_PREFIX = "ML_ADVISOR_"
+MAX_SYSTEM_PROMPT_CHARS = 1000
 
 # Providers com agente funcional neste projeto.
 AVAILABLE_PROVIDERS: frozenset[str] = frozenset({"ollama"})
@@ -133,6 +135,7 @@ class Settings:
     timeout: float
     temperature: float
     max_tokens: int
+    system_prompt: str | None = None
 
     @property
     def is_available(self) -> bool:
@@ -144,16 +147,21 @@ class Settings:
 
     def describe(self) -> str:
         status = "implementado" if self.is_available else "planejado"
-        return "\n".join(
-            [
-                f"provider:    {self.provider} ({status})",
-                f"preset:      {self.preset}",
-                f"model:       {self.model}",
-                f"timeout:     {self.timeout}s",
-                f"temperature: {self.temperature}",
-                f"max_tokens:  {self.max_tokens}",
-            ]
-        )
+        lines = [
+            f"provider:    {self.provider} ({status})",
+            f"preset:      {self.preset}",
+            f"model:       {self.model}",
+            f"timeout:     {self.timeout}s",
+            f"temperature: {self.temperature}",
+            f"max_tokens:  {self.max_tokens}",
+        ]
+        if self.system_prompt:
+            preview = self.system_prompt[:60].replace("\n", " ")
+            suffix = "..." if len(self.system_prompt) > 60 else ""
+            lines.append(f"system_prompt: {preview}{suffix}")
+        else:
+            lines.append("system_prompt: (não definido)")
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +258,7 @@ def load_settings(
     timeout: float | None = None,
     temperature: float | None = None,
     max_tokens: int | None = None,
+    system_prompt: str | None = None,
     config_path: Path | str | None = None,
 ) -> Settings:
     """Resolve a configuração efetiva seguindo a cadeia de prioridade."""
@@ -315,6 +324,21 @@ def load_settings(
     if resolved_max_tokens <= 0:
         raise SettingsError(f"max_tokens deve ser > 0, recebido: {resolved_max_tokens}")
 
+    raw_system = _first_not_none(
+        system_prompt,
+        _env("SYSTEM_PROMPT"),
+        toml_data.get("system_prompt"),
+    )
+    resolved_system: str | None
+    if raw_system is None:
+        resolved_system = None
+    else:
+        resolved_system = sanitize_text(
+            raw_system,
+            max_length=MAX_SYSTEM_PROMPT_CHARS,
+            field_name="system_prompt",
+        )
+
     return Settings(
         provider=resolved_provider,
         preset=resolved_preset,
@@ -322,4 +346,5 @@ def load_settings(
         timeout=float(resolved_timeout),
         temperature=float(resolved_temperature),
         max_tokens=int(resolved_max_tokens),
+        system_prompt=resolved_system,
     )

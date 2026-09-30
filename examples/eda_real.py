@@ -31,6 +31,16 @@ def main() -> None:
     parser.add_argument("path", type=Path, help="Caminho do dataset.")
     parser.add_argument("--no-llm", action="store_true")
     parser.add_argument("--head", type=int, default=0, help="Mostrar N primeiras linhas antes.")
+    parser.add_argument(
+        "--context",
+        default=None,
+        help="Contexto do dataset (injetado no prompt).",
+    )
+    parser.add_argument(
+        "--instructions",
+        default=None,
+        help="Instruções adicionais para esta análise.",
+    )
     args = parser.parse_args()
 
     if not args.path.exists():
@@ -44,7 +54,7 @@ def main() -> None:
         print(df.head(args.head), "\n")
 
     if args.no_llm:
-        analyzer = DataAnalyzer(df)
+        analyzer = DataAnalyzer(df, user_context=args.context)
         print(analyzer.report())
         return
 
@@ -54,8 +64,8 @@ def main() -> None:
     with OllamaSession(auto_close=True):
         agent = create_agent()
         print(f"Agente: {agent.name}\n")
-        analyzer = DataAnalyzer(df, agent=agent)
-        print(analyzer.report())
+        analyzer = DataAnalyzer(df, agent=agent, user_context=args.context)
+        print(analyzer.report(extra_instructions=args.instructions))
 
 
 if __name__ == "__main__":

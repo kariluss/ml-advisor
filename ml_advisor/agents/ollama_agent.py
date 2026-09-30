@@ -89,6 +89,8 @@ class OllamaAgent(BaseAgent):
                 "num_predict": max_tokens,
             },
         }
+        if system is None:
+            system = self.settings.system_prompt
         if system is not None:
             payload["system"] = system
 
