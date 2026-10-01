@@ -25,6 +25,11 @@ ml_advisor/
 └── utils/      Infraestrutura (config, controle de serviços, texto).
 ```
 
+> As decisões técnicas com justificativa detalhada (thresholds,
+> escolha de testes, base teórica) estão catalogadas em
+> [`docs/decisions.md`](decisions.md). Este arquivo cobre a
+> arquitetura geral e as decisões estruturais.
+
 ### Princípio de separação
 
 Os módulos `core/*` **não sabem** que existe um LLM. Eles recebem um
