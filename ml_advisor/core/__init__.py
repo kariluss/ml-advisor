@@ -9,5 +9,12 @@ from ml_advisor.core.data_analyzer import (
     DataAnalyzer,
     DatasetSummary,
 )
+from ml_advisor.core.hypothesis_tester import HypothesisTester, TestResult
 
-__all__ = ["ColumnSummary", "DataAnalyzer", "DatasetSummary"]
+__all__ = [
+    "ColumnSummary",
+    "DataAnalyzer",
+    "DatasetSummary",
+    "HypothesisTester",
+    "TestResult",
+]

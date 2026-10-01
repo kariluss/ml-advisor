@@ -11,7 +11,6 @@ from ml_advisor.settings import (
     DEFAULT_PRESET,
     DEFAULT_PROVIDER,
     PLANNED_PROVIDERS,
-    PRESETS,
     SettingsError,
     list_presets,
     load_settings,
