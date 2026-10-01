@@ -51,7 +51,7 @@ def main() -> None:
     from ml_advisor.agents import create_agent
     from ml_advisor.utils.ollama_control import OllamaSession
 
-    with OllamaSession(auto_close=True) as _host:
+    with OllamaSession(auto_close=True):
         agent = create_agent()
         print(f"Agente: {agent.name}\n")
         analyzer = DataAnalyzer(df, agent=agent)
