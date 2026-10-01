@@ -37,4 +37,6 @@ uv run python examples/test_ollama.py
 
 - [`docs/setup.md`](docs/setup.md) — como reproduzir o ambiente do zero.
 - [`docs/architecture.md`](docs/architecture.md) — visão de arquitetura e
-  decisões de design.
+  decisões de projeto.
+- [`docs/decisions.md`](docs/decisions.md) — catálogo de decisões técnicas
+  (ADRs) com justificativa e base teórica.
