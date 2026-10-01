@@ -305,12 +305,82 @@ Para análises que dependem de interpretação correta, preferir o preset
 7B quantizados são viáveis para EDA assistida, mas não substituem
 julgamento humano em interpretação estatística.
 
+## Módulos implementados
+
+### `core/data_analyzer.py`
+
+Análise exploratória: sumário estatístico por coluna, alertas
+automáticos, correlações, narrativa opcional via LLM.
+
+### `core/hypothesis_tester.py`
+
+Testes de hipóteses estatísticas com foco em métodos consolidados.
+
+**Escopo deliberadamente restrito** — prioriza testes com base teórica
+sólida e interpretação bem estabelecida:
+
+| Teste | Aplicação | H0 | Tamanho de efeito |
+|-------|-----------|-----|-------------------|
+| Shapiro-Wilk | Uma numérica, n ≤ 5000 | Dados normais | — |
+| Welch's t-test | Numérica × binária | Médias iguais | Cohen's d |
+| Mann-Whitney U | Idem, complementar não-paramétrico | Distribuições iguais | rank-biserial r |
+| Chi² independência | Categórica × categórica | Independência | Cramér's V |
+| Pearson | Numérica × numérica | Correlação linear = 0 | r |
+| Spearman | Idem, robusto | Correlação monotônica = 0 | ρ |
+
+**Decisões de design:**
+
+- `auto_suggest()` detecta automaticamente quais testes fazem sentido
+  para cada par de variáveis (com ou sem `target`).
+- Métodos individuais permanecem expostos para uso explícito.
+- Welch's t-test **sempre roda com Mann-Whitney complementar**, e o
+  resultado inclui nota quando Shapiro-Wilk falha nos grupos.
+- Tamanhos de efeito são reportados sempre, com classificação
+  qualitativa (negligenciável / pequeno / médio / grande).
+- Prompt do LLM inclui regra explícita para **não confundir rejeitar H0
+  com provar H1**, e para considerar tamanho de efeito junto com o
+  p-valor.
+
+**Fora de escopo (possível trabalho futuro):** ANOVA, Kruskal-Wallis,
+teste t pareado, Fisher exato, Anderson-Darling.
+
+### `core/ml_recommender.py`
+
+Sugere algoritmos de ML baseado em perfil objetivo do dataset.
+
+**Perfil detectado** (`DatasetProfile`):
+
+- Tipo de problema: `classification_binary`, `classification_multiclass`,
+  `regression` ou `clustering`.
+- Amostras, features (numéricas vs categóricas), % de missing.
+- Desbalanceamento de classes (razão majority:minority).
+- Alta dimensionalidade (≥ 50 features), amostra pequena (< 200 linhas).
+- Detecção de colunas tipo ID (inteiras com todos os valores únicos).
+
+**Regras de recomendação por problema:**
+
+| Problema | Baseline | Recomendado | Alternativa / Condicional |
+|----------|----------|-------------|---------------------------|
+| Classificação binária | Regressão Logística | Random Forest; Gradient Boosting (n ≥ 1000); pesos de classe (se imbalanced); seleção de features (se alta dim.) | — |
+| Classificação multiclasse | Regressão Logística multinomial | Random Forest; Gradient Boosting (n ≥ 1000) | — |
+| Regressão | Linear / Ridge / Lasso | Random Forest; Gradient Boosting (n ≥ 1000) | Regularização (se alta dim.) |
+| Clustering | K-Means | — | DBSCAN; Hierárquico (n < 5000) |
+
+**Prioridade:** `baseline` (sempre comece por aqui), `recomendado`
+(escolha principal), `alternativa` (quando faz sentido mas não é a
+primeira opção).
+
+**Decisões de design:**
+
+- Threshold de Gradient Boosting em n ≥ 1000: abaixo disso, árvores
+  pequenas tendem a superar GB e treinam mais rápido.
+- Detecção de ID evita que o usuário inclua colunas sem valor
+  preditivo por descuido.
+- `interpret()` produz 5 seções: diagnóstico, modelos, pré-processamento,
+  cuidados, validação.
+
 ## Próximos módulos planejados
 
-- `core/hypothesis_tester.py` — testes estatísticos (Shapiro-Wilk,
-  t-test, chi²) com interpretação. Dependência de LLM menor que o
-  `DataAnalyzer`: a parte determinística carrega a maior parte do valor.
-- `core/ml_recommender.py` — sugere algoritmos com base nas
-  características do dataset.
-- `report/report_generator.py` — consolida tudo em markdown/HTML.
+- `report/report_generator.py` — consolida todos os módulos de `core/`
+  em um relatório único (markdown / HTML).
 - `utils/visualization.py` — histogramas, boxplots, matriz de correlação.
