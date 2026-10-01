@@ -10,11 +10,19 @@ from ml_advisor.core.data_analyzer import (
     DatasetSummary,
 )
 from ml_advisor.core.hypothesis_tester import HypothesisTester, TestResult
+from ml_advisor.core.ml_recommender import (
+    DatasetProfile,
+    MLRecommender,
+    Recommendation,
+)
 
 __all__ = [
     "ColumnSummary",
     "DataAnalyzer",
+    "DatasetProfile",
     "DatasetSummary",
     "HypothesisTester",
+    "MLRecommender",
+    "Recommendation",
     "TestResult",
 ]
