@@ -4,7 +4,6 @@ __pycache__/
 *.egg-info/
 .venv/
 .env
-tests/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -23,3 +22,6 @@ data/
 .mypy_cache/
 .ruff_cache/
 .kilo/
+# Saídas de exemplos/demos
+relatorio_*.md
+relatorio_*.html
