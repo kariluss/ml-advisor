@@ -40,18 +40,22 @@ para enriquecer a saída com narrativa. Isso permite:
 - Trocar o backend de LLM sem tocar em `core/*`.
 - Usar `core/*` de forma "pura" (só estatística) quando o LLM é overkill.
 
-### Fluxo de dados (planejado)
+### Fluxo de dados
 
 ```
 DataFrame
    │
-   ▼
-[core.DataAnalyzer] ──► resumo estruturado (dict/dataclass)
+   ├──► [core.DataAnalyzer] ──► resumo estruturado + narrativa
    │
-   ├──► [agents.OllamaAgent] ──► narrativa interpretativa
+   ├──► [core.HypothesisTester] ──► testes + narrativa
+   │
+   ├──► [core.MLRecommender] ──► perfil + recomendações + narrativa
    │
    ▼
 [report.ReportGenerator] ──► markdown / HTML final
+       ▲
+       │
+   [agents.OllamaAgent] (opcional)
 ```
 
 ## Decisões de design
@@ -176,6 +180,22 @@ mudar a persona do modelo.
 - Delimitação explícita (`<CONTEXTO DO USUÁRIO>`).
 - Regras estritas do sistema têm precedência sobre o contexto do usuário.
 - Degradação graciosa: sem customização, comportamento idêntico ao anterior.
+
+### 11. Relatório consolidado com HTML autocontido
+
+**Contexto:** o `ReportGenerator` precisa produzir um documento
+apresentável para leitura humana e para a banca.
+
+**Decisão:**
+- Exportação em **markdown** (`.md`) e **HTML** (`.html`).
+- HTML tem **CSS embutido** — um arquivo autocontido, sem dependências.
+- Conversão markdown → HTML via biblioteca `markdown` (pura Python,
+  sem dependências nativas).
+- Cada seção é gerada chamando o módulo `core/*` correspondente
+  (reuso, não reimplementação).
+
+**Benefício:** um único arquivo `.html` pode ser aberto em qualquer
+navegador, anexado em e-mail ou impresso em PDF sem infraestrutura.
 
 ## Extensão: adicionando um novo provider de LLM
 
@@ -384,8 +404,52 @@ primeira opção).
 - `interpret()` produz 5 seções: diagnóstico, modelos, pré-processamento,
   cuidados, validação.
 
+### `report/report_generator.py`
+
+Consolida os três módulos de `core/` em um único documento
+(markdown ou HTML). É a peça "apresentável" do projeto.
+
+**Estrutura do relatório:**
+
+1. Cabeçalho com metadados (dimensões, provider, modelo, preset, versão).
+2. Sumário executivo (gerado por LLM, opcional).
+3. Análise exploratória (via `DataAnalyzer`).
+4. Testes de hipóteses (via `HypothesisTester`).
+5. Recomendações de ML (via `MLRecommender`).
+
+**Decisões de design:**
+
+- **Reuso, não reimplementação:** o `ReportGenerator` **chama** os
+  três módulos — não duplica lógica.
+- **Seções opcionais:** `include_eda`, `include_hypotheses`,
+  `include_ml` permitem gerar relatórios parciais.
+- **Sumário executivo é opcional e requer LLM.** Sem agente, o
+  relatório é puramente determinístico.
+- **Exportação:** `.md` (markdown puro) ou `.html` (CSS embutido,
+  autocontido). O HTML usa a biblioteca `markdown` para renderizar.
+- **Metadados sempre presentes.** Inclui `provider` e `modelo` quando
+  um agente é passado; caso contrário, indica "modo determinístico".
+
+**Cuidado com o ciclo de vida do Ollama:** ao usar `OllamaSession(auto_close=True)`,
+**todo o trabalho pesado** (a chamada `gen.generate()`) precisa acontecer
+**dentro** do bloco `with`. Se a chamada for feita fora, o Ollama é
+encerrado antes da geração e ocorre timeout.
+
+## Testes com dados reais
+
+A suíte de testes inclui uma amostra real de 50 linhas do dataset
+Titanic (Kaggle), embutida em `tests/conftest.py`. Ela é usada para
+validar comportamentos em dados com quirks reais:
+
+- Nulos em `Age`, `Cabin` e `Embarked`.
+- Alta cardinalidade em `Name` e `Ticket`.
+- Inteiros de baixa cardinalidade (`Survived`, `Pclass`) que precisam
+  ser reclassificados como categóricos (ver DEC-006).
+- Colunas tipo ID (`PassengerId`, ver DEC-022).
+
+Escolha por amostra embutida em vez de arquivo externo: garante
+reprodutibilidade em CI e em outras máquinas sem depender de download.
+
 ## Próximos módulos planejados
 
-- `report/report_generator.py` — consolida todos os módulos de `core/`
-  em um relatório único (markdown / HTML).
 - `utils/visualization.py` — histogramas, boxplots, matriz de correlação.
