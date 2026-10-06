@@ -12,6 +12,7 @@ dependencies = [
     "scikit-learn>=1.9.1",
     "matplotlib>=3.11.2",
     "seaborn>=0.13.2",
+    "markdown>=3.11",
 ]
 
 [build-system]
