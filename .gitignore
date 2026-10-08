@@ -25,3 +25,6 @@ data/
 # Saídas de exemplos/demos
 relatorio_*.md
 relatorio_*.html
+
+# Saídas de experimentos
+resultados/
